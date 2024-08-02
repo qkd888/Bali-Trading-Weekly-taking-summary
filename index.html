@@ -1,1 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Weekly Amounts</title>
+    <style>
+      :root {
+        --primary-color: #4a90e2;
+        --secondary-color: #f5f5f5;
+        --text-color: #333;
+        --border-color: #ddd;
+        --success-color: #4caf50;
+        --warning-color: #ff9800;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: "Arial", sans-serif;
+        background-color: var(--secondary-color);
+        color: var(--text-color);
+        line-height: 1.6;
+      }
+
+      .container {
+        max-width: 1000px;
+        margin: 20px auto;
+        padding: 20px;
+        background-color: #ffffff;
+        border-radius: 8px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      }
+
+      h1 {
+        text-align: center;
+        color: var(--primary-color);
+        margin-bottom: 20px;
+      }
+
+      .date-selector,
+      .questions {
+        margin-bottom: 20px;
+      }
+
+      .date-selector label,
+      .questions label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+      }
+
+      .date-selector input,
+      input[type="text"],
+      input[type="number"],
+      textarea {
+        width: 100%;
+        padding: 8px;
+        margin-bottom: 10px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        font-size: 16px;
+      }
+
+      textarea {
+        resize: vertical;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 20px;
+      }
+
+      th,
+      td {
+        border: 1px solid var(--border-color);
+        padding: 12px;
+        text-align: left;
+      }
+
+      th {
+        background-color: var(--primary-color);
+        color: white;
+        font-weight: bold;
+      }
+
+      .footer {
+        font-weight: bold;
+        background-color: var(--secondary-color);
+      }
+
+      .buttons {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 20px;
+      }
+
+      button {
+        padding: 10px 20px;
+        font-size: 16px;
+        cursor: pointer;
+        background-color: var(--primary-color);
+        color: white;
+        border: none;
+        border-radius: 4px;
+        transition: background-color 0.3s, transform 0.1s;
+      }
+
+      button:hover {
+        background-color: #3a7bc8;
+        transform: translateY(-2px);
+      }
+
+      button:active {
+        transform: translateY(0);
+      }
+
+      .alert {
+        padding: 10px;
+        margin-bottom: 15px;
+        border-radius: 4px;
+        display: none;
+      }
+
+      .alert-success {
+        background-color: var(--success-color);
+        color: white;
+      }
+
+      .alert-warning {
+        background-color: var(--warning-color);
+        color: white;
+      }
+
+      @media print {
+        body {
+          background-color: white;
+          margin: 0;
+          padding: 0;
+        }
+
+        .container {
+          box-shadow: none;
+          margin: 0;
+          padding: 0;
+          width: 100%;
+        }
+
+        .buttons,
+        .alert {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app" class="container">
+      <h1>Weekly Amounts</h1>
+
+      <div class="alert" id="alert"></div>
+
+      <div class="date-selector">
+        <label for="weekStart">Week Starting:</label>
+        <input type="date" id="weekStart" onchange="updateDates()" />
+      </div>
+
+      <div class="questions">
+        <label for="question1">Was the Mall/Area busy?</label>
+        <input type="text" id="question1" name="question1" />
+
+        <label for="question2">What were the best sellers for the week?</label>
+        <input type="text" id="question2" name="question2" />
+
+        <label for="question3">Client Requests:</label>
+        <textarea id="question3" name="question3" rows="3"></textarea>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Day of the Week</th>
+            <th>Amount</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+        <tfoot>
+          <tr class="footer">
+            <td colspan="2" data-label="Total">Grand Total</td>
+            <td data-label="Amount" id="grandTotal">0.00</td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <div class="buttons">
+        <button onclick="clearData()">Clear Data</button>
+        <button onclick="saveData()">Save Data</button>
+        <button onclick="convertToPDF()">Convert to PDF</button>
+      </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", initializeTable);
+
+      const days = [
+        "Sunday",
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+      ];
+      const tableBody = document.getElementById("tableBody");
+      const grandTotalElement = document.getElementById("grandTotal");
+      const weekStartInput = document.getElementById("weekStart");
+      const alertElement = document.getElementById("alert");
+
+      function initializeTable() {
+        setWeekStartToMonday();
+        updateDates();
+        loadSavedData();
+      }
+
+      function setWeekStartToMonday() {
+        const today = new Date();
+        const monday = new Date(
+          today.setDate(today.getDate() - today.getDay() + 1)
+        );
+        weekStartInput.value = monday.toISOString().split("T")[0];
+      }
+
+      function updateDates() {
+        tableBody.innerHTML = "";
+        const weekStart = new Date(weekStartInput.value);
+
+        for (let i = 0; i < 7; i++) {
+          const currentDate = new Date(weekStart);
+          currentDate.setDate(weekStart.getDate() + i);
+
+          const row = tableBody.insertRow();
+          createCell(row, 0, currentDate.toLocaleDateString(), "Date");
+          createCell(row, 1, days[currentDate.getDay()], "Day");
+
+          const amountCell = row.insertCell(2);
+          const input = document.createElement("input");
+          input.type = "number";
+          input.min = "0";
+          input.step = "0.01";
+          input.value = "0";
+          input.addEventListener("input", updateGrandTotal);
+          amountCell.appendChild(input);
+          amountCell.setAttribute("data-label", "Amount");
+        }
+        updateGrandTotal();
+      }
+
+      function createCell(row, index, text, label) {
+        const cell = row.insertCell(index);
+        cell.textContent = text;
+        cell.setAttribute("data-label", label);
+      }
+
+      function updateGrandTotal() {
+        const total = Array.from(tableBody.querySelectorAll("input")).reduce(
+          (sum, input) => sum + parseFloat(input.value || "0"),
+          0
+        );
+        grandTotalElement.textContent = total.toFixed(2);
+      }
+
+      function clearData() {
+        document
+          .querySelectorAll("input:not(#weekStart), textarea")
+          .forEach((input) => {
+            input.type === "number" ? (input.value = "0") : (input.value = "");
+          });
+        updateGrandTotal();
+        showAlert("Data cleared successfully", "success");
+      }
+
+      function saveData() {
+        const data = {
+          weekStart: weekStartInput.value,
+          question1: document.getElementById("question1").value,
+          question2: document.getElementById("question2").value,
+          question3: document.getElementById("question3").value,
+          amounts: Array.from(tableBody.querySelectorAll("input")).map(
+            (input) => input.value
+          ),
+        };
+        localStorage.setItem("weeklyAmountsData", JSON.stringify(data));
+        showAlert("Data saved successfully", "success");
+      }
+
+      function loadSavedData() {
+        const savedData = JSON.parse(localStorage.getItem("weeklyAmountsData"));
+        if (savedData) {
+          weekStartInput.value = savedData.weekStart;
+          document.getElementById("question1").value = savedData.question1;
+          document.getElementById("question2").value = savedData.question2;
+          document.getElementById("question3").value = savedData.question3;
+          updateDates();
+          const inputs = tableBody.querySelectorAll("input");
+          savedData.amounts.forEach(
+            (amount, index) => (inputs[index].value = amount)
+          );
+          updateGrandTotal();
+          showAlert("Saved data loaded", "success");
+        }
+      }
+
+      function convertToPDF() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+
+        // Add title
+        doc.setFontSize(20);
+        doc.text("Weekly Amounts", 105, 15, null, null, "center");
+
+        // Add week start date
+        doc.setFontSize(12);
+        doc.text(`Week Starting: ${weekStartInput.value}`, 20, 25);
+
+        // Add questions and answers
+        doc.text("Questions:", 20, 35);
+        doc.setFontSize(10);
+        doc.text(
+          `1. Was the Mall/Area busy? ${
+            document.getElementById("question1").value
+          }`,
+          25,
+          45
+        );
+        doc.text(
+          `2. What were the best sellers for the week? ${
+            document.getElementById("question2").value
+          }`,
+          25,
+          55
+        );
+        doc.text(
+          `3. Client Requests: ${document.getElementById("question3").value}`,
+          25,
+          65
+        );
+
+        // Add table
+        const tableData = Array.from(tableBody.rows).map((row) => [
+          row.cells[0].textContent,
+          row.cells[1].textContent,
+          row.cells[2].querySelector("input").value,
+        ]);
+
+        doc.autoTable({
+          head: [["Date", "Day of the Week", "Amount"]],
+          body: tableData,
+          foot: [["Grand Total", "", grandTotalElement.textContent]],
+          startY: 75,
+        });
+
+        // Add page numbers
+        const pageCount = doc.internal.getNumberOfPages();
+        for (let i = 1; i <= pageCount; i++) {
+          doc.setPage(i);
+          doc.setFontSize(10);
+          doc.text(
+            `Page ${i} of ${pageCount}`,
+            doc.internal.pageSize.width - 30,
+            doc.internal.pageSize.height - 10
+          );
+        }
+
+        // Save the PDF
+        doc.save("weekly_amounts.pdf");
+      }
+
+      function showAlert(message, type) {
+        alertElement.textContent = message;
+        alertElement.className = `alert alert-${type}`;
+        alertElement.style.display = "block";
+        setTimeout(() => {
+          alertElement.style.display = "none";
+        }, 3000);
+      }
+    </script>
+  </body>
+</html>
 
